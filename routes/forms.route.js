@@ -22,13 +22,12 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Import controllers
-const { addCarLoanLead } = require("../controllers/car.loan");
 const { addSellCarLead } = require("../controllers/sell.car.loan.form");
 const { addInsuranceInquiry, getPolicyFile } = require("../controllers/insurance.controller");
 const { addLoanInquiry } = require("../Controllers/loan.controller");
-const { addLead, contactUs, saveWhatsAppLead } = require("../Controllers/car.loan");
+const { addLead, contactUs, saveWhatsAppLead, addCarLoanLead } = require("../controllers/car.loan");
 
-// Routes
+// Routes 
 router.post("/inquiry", addCarLoanLead);
 router.post("/sell-car", addSellCarLead);
 router.post("/insurance-inquiry", upload.single("policy_copy"), addInsuranceInquiry);

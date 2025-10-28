@@ -53,7 +53,7 @@ exports.addCarLoanLead = async (req, res) => {
               parameters,
             },
           ],
-          name: "loan_follow_up",
+          name: "loan_follow_v5",
           language: { code: "en", policy: "deterministic" },
         },
         messaging_product: "whatsapp",
@@ -69,7 +69,7 @@ exports.addCarLoanLead = async (req, res) => {
           payload,
           {
             headers: {
-              wabaNumber: `${process.env.ADMIN_NUMBER}`,
+              wabaNumber: `${process.env.WABA_NUMBER}`,
               Key: "2142e5c136XX",
               "Content-Type": "application/json",
             },
@@ -86,7 +86,7 @@ exports.addCarLoanLead = async (req, res) => {
     const userResponse = await sendWhatsApp(`91${mobile}`);
 
     // Send WhatsApp to admin
-    const adminNumber = "919867358999";
+    const adminNumber = process.env.ADMIN_NUMBER;
     const adminResponse = await sendWhatsApp(adminNumber);
 
     // Final response
@@ -124,7 +124,7 @@ exports.addLead = async (req, res) => {
 
     // Prepare WhatsApp API config
     const headers = {
-      "wabaNumber": `${process.env.ADMIN_NUMBER}`,
+      "wabaNumber": `${process.env.WABA_NUMBER}`,
       "Key": "2142e5c136XX",
       "Content-Type": "application/json",
       "Cookie": "JSESSIONID=26CF04555248071895977A5898BD4FBC"
@@ -133,12 +133,14 @@ exports.addLead = async (req, res) => {
     // 1️⃣ Notify admin/team
     const adminPayload = {
       template: {
-        name: "home_page_lead",
+        name: "homepagelead_v2",
         language: { code: "en", policy: "deterministic" },
         components: [
           {
             type: "BODY",
             parameters: [
+              { type: "text", text: name },
+              { type: "text", text: service },
               { type: "text", text: name },
               { type: "text", text: number },
               { type: "text", text: service }
@@ -147,20 +149,23 @@ exports.addLead = async (req, res) => {
         ]
       },
       messaging_product: "whatsapp",
-      to: "919867358999", // Admin/Team number
+      to: process.env.ADMIN_NUMBER, // Admin/Team number
       type: "template"
     };
 
     // 2️⃣ Thank the user
     const userPayload = {
       template: {
-        name: "us_homepagelead",
+        name: "homepagelead_v2",
         language: { code: "en", policy: "deterministic" },
         components: [
           {
             type: "BODY",
             parameters: [
               { type: "text", text: name },
+              { type: "text", text: service },
+              { type: "text", text: name },
+              { type: "text", text: number },
               { type: "text", text: service }
             ]
           }
@@ -234,26 +239,27 @@ exports.contactUs = async (req, res) => {
       "https://api.dovesoft.io/REST/directApi/message",
       {
         template: {
-          name: "contact_us_feed", // ✅ Team template
+          name: "contact_us_v3", // ✅ Team template
           language: { code: "en", policy: "deterministic" },
           components: [
             {
               type: "BODY",
               parameters: [
-                { type: "text", text: name },  // {{1}}
-                { type: "text", text: phone }, // {{2}}
-                { type: "text", text: email }  // {{3}}
+                { type: "text", text: name },
+                { type: "text", text: name },
+                { type: "text", text: phone },
+                { type: "text", text: email }
               ]
             }
           ],
         },
         messaging_product: "whatsapp",
-        to: "919867358999", // ✅ Team member number
+        to: process.env.ADMIN_NUMBER, // ✅ Team member number
         type: "template",
       },
       {
         headers: {
-          wabaNumber: `${process.env.ADMIN_NUMBER}`,
+          wabaNumber: `${process.env.WABA_NUMBER}`,
           Key: "2142e5c136XX",
           "Content-Type": "application/json",
         }
@@ -265,24 +271,27 @@ exports.contactUs = async (req, res) => {
       "https://api.dovesoft.io/REST/directApi/message",
       {
         template: {
-          name: "contact_us_user", // ✅ User template
+          name: "contact_us_v3", // ✅ User template
           language: { code: "en", policy: "deterministic" },
           components: [
             {
               type: "BODY",
               parameters: [
-                { type: "text", text: name } // {{1}}
+                { type: "text", text: name },
+                { type: "text", text: name },
+                { type: "text", text: phone },
+                { type: "text", text: email }
               ]
             }
           ],
         },
         messaging_product: "whatsapp",
-        to: phone, // ✅ Sends to user
+        to: `91${phone}`, // ✅ Sends to user
         type: "template",
       },
       {
         headers: {
-          wabaNumber: `${process.env.ADMIN_NUMBER}`,
+          wabaNumber: `${process.env.WABA_NUMBER}`,
           Key: "2142e5c136XX",
           "Content-Type": "application/json",
         }
@@ -301,27 +310,110 @@ exports.contactUs = async (req, res) => {
 };
 
 exports.saveWhatsAppLead = async (req, res) => {
+  const {
+    name,
+    number,
+    service,
+    aadhar_number,
+    pan_number,
+    adhar, // from frontend
+    pan,   // from frontend
+  } = req.body;
+
+  // console.log("request body", req.body);
+
+  const finalAadhar = aadhar_number || adhar || "N/A";
+  const finalPan = pan_number || pan || "N/A";
+
+  if (!name || !number) {
+    return res
+      .status(400)
+      .json({ error: "Name and Mobile Number are required" });
+  }
+
   try {
-    const { name, mobile_number, aadhar_number, pan_number, service } = req.body;
-
-    // Basic validation
-    if (!name || !mobile_number) {
-      return res.status(400).json({ message: "Name and Mobile Number are required." });
-    }
-
+    // 1️⃣ Save to Database
     const db = getDb();
-
-    // ✅ Insert query
-    await db.query(
+    const [result] = await db.execute(
       `INSERT INTO whatsapp_leads 
        (name, mobile_number, aadhar_number, pan_number, service) 
        VALUES (?, ?, ?, ?, ?)`,
-      [name, mobile_number, aadhar_number || null, pan_number || null, service || null]
+      [name, number, finalAadhar, finalPan, service || null]
     );
 
-    res.status(201).json({ message: "Lead saved successfully!" });
+    // 2️⃣ Send WhatsApp Message to Team
+    await axios.post(
+      "https://api.dovesoft.io/REST/directApi/message",
+      {
+        template: {
+          name: "wa_lead_v3",
+          language: { code: "en", policy: "deterministic" },
+          components: [
+            {
+              type: "BODY",
+              parameters: [
+                { type: "text", text: name },
+                { type: "text", text: service || "N/A" },
+                { type: "text", text: number },
+                { type: "text", text: finalAadhar },
+                { type: "text", text: finalPan },
+              ],
+            },
+          ],
+        },
+        messaging_product: "whatsapp",
+        to: process.env.ADMIN_NUMBER,
+        type: "template",
+      },
+      {
+        headers: {
+          wabaNumber: `${process.env.WABA_NUMBER}`,
+          Key: "2142e5c136XX",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // 3️⃣ Send WhatsApp Message to User
+    await axios.post(
+      "https://api.dovesoft.io/REST/directApi/message",
+      {
+        template: {
+          name: "wa_lead_v3",
+          language: { code: "en", policy: "deterministic" },
+          components: [
+            {
+              type: "BODY",
+              parameters: [
+                { type: "text", text: name },
+                { type: "text", text: service || "N/A" },
+                { type: "text", text: number },
+                { type: "text", text: finalAadhar },
+                { type: "text", text: finalPan },
+              ],
+            },
+          ],
+        },
+        messaging_product: "whatsapp",
+        to: `91${number}`,
+        type: "template",
+      },
+      {
+        headers: {
+          wabaNumber: `${process.env.WABA_NUMBER}`,
+          Key: "2142e5c136XX",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // ✅ Final Success Response
+    res.status(201).json({
+      message: "Lead saved and WhatsApp notifications sent successfully.",
+      id: result.insertId,
+    });
   } catch (err) {
-    console.error("❌ Error while saving lead:", err);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("❌ Error saving WhatsApp lead:", err.response?.data || err.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };

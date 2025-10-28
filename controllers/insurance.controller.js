@@ -21,7 +21,7 @@ exports.addInsuranceInquiry = async (req, res) => {
       claim_status,
     } = req.body;
 
-    // ✅ Validation
+    // ✅ Validate required fields
     if (
       !name ||
       !mobile ||
@@ -41,17 +41,18 @@ exports.addInsuranceInquiry = async (req, res) => {
         .json({ success: false, message: "All required fields must be filled" });
     }
 
-    // ✅ Handle file if provided
+    // ✅ Handle uploaded policy file (optional)
     let fileData = null;
     if (req.file) {
       fileData = fs.readFileSync(req.file.path);
-      fs.unlink(req.file.path, () => { }); // delete temp file
+      fs.unlink(req.file.path, () => {}); // cleanup temp file
     }
 
-    // ✅ Insert into database
+    // ✅ Save inquiry in database
     const [result] = await db.query(
       `INSERT INTO insurance_inquiries
-       (name, mobile, email, make, model, variant, rto_location, fuel_type, existing_insurance_company, ncb_expiring_policy, idv, claim_status, policy_copy)
+       (name, mobile, email, make, model, variant, rto_location, fuel_type,
+        existing_insurance_company, ncb_expiring_policy, idv, claim_status, policy_copy)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name,
@@ -70,68 +71,67 @@ exports.addInsuranceInquiry = async (req, res) => {
       ]
     );
 
-    // console.log("✅ Insurance inquiry saved with ID:", result.insertId);
-
-    // ✅ WhatsApp message payload (adjust template name accordingly)
-    const payload = {
+    // ✅ WhatsApp Template Payload
+    const whatsappPayload = {
+      messaging_product: "whatsapp",
+      to: `91${mobile}`, // recipient (user)
+      type: "template",
       template: {
+        name: "carinsurancev1", // new approved template
+        language: { code: "en", policy: "deterministic" },
         components: [
           {
-            type: "BODY",
+            type: "body",
             parameters: [
+              { type: "text", text: name },
               { type: "text", text: name },
               { type: "text", text: mobile },
               { type: "text", text: email },
               { type: "text", text: make },
               { type: "text", text: model },
               { type: "text", text: variant },
+              { type: "text", text: rto_location },
+              { type: "text", text: fuel_type },
               { type: "text", text: existing_insurance_company },
+              { type: "text", text: ncb_expiring_policy },
+              { type: "text", text: idv },
+              { type: "text", text: claim_status },
             ],
           },
         ],
-        name: "insu_follow_up",
-        language: { code: "en", policy: "deterministic" },
       },
-      messaging_product: "whatsapp",
-      to: `${mobile}`, // Always send with country code (if in India)
-      type: "template",
     };
 
-
-    // ✅ Send message to user
+    // ✅ Send WhatsApp message to user
     const responseUser = await axios.post(
       "https://api.dovesoft.io/REST/directApi/message",
-      payload,
+      whatsappPayload,
       {
         headers: {
-          wabaNumber: `${process.env.ADMIN_NUMBER}`,
-          Key: "2142e5c136XX",
+          wabaNumber: `${process.env.WABA_NUMBER}`,
+          Key: "2142e5c136XX", // better to store securely
           "Content-Type": "application/json",
         },
       }
     );
 
-    // console.log("📨 WhatsApp sent to user:", responseUser.data);
-
     // ✅ Send same message to admin
-    const adminNumber = "919867358999"; // replace with your admin number
-    const payloadAdmin = { ...payload, to: adminNumber };
+    const adminNumber = process.env.ADMIN_NUMBER; // replace with your admin WhatsApp number
+    const payloadAdmin = { ...whatsappPayload, to: adminNumber };
 
     const responseAdmin = await axios.post(
       "https://api.dovesoft.io/REST/directApi/message",
       payloadAdmin,
       {
         headers: {
-          wabaNumber: `${process.env.ADMIN_NUMBER}`,
+          wabaNumber: `${process.env.WABA_NUMBER}`,
           Key: "2142e5c136XX",
           "Content-Type": "application/json",
         },
       }
     );
 
-    // console.log("📨 WhatsApp sent to admin:", responseAdmin.data);
-
-    // ✅ Final API response
+    // ✅ Respond success
     return res.status(201).json({
       success: true,
       message:
